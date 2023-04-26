@@ -1,6 +1,9 @@
+from options import Options
 from load_data import load_data
 from q1a_plot import q1a_plot
 
 
-X_train, y_train, X_test, y_test = load_data()
-q1a_plot(X_train)
+options = Options(normalize=False)
+
+X_train, y_train, X_test, y_test = load_data(options)
+q1a_plot(options, X_train)
