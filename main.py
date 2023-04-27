@@ -7,4 +7,4 @@ options = Options(normalize=True)
 
 X_train, y_train, X_test, y_test = load_data(options)
 # q1a_plot(options, X_train)
-build_model = build_model(options, X_train, y_train, X_test, y_test)
+model = build_model(options, X_train, y_train, X_test, y_test)
