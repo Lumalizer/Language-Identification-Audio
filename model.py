@@ -1,35 +1,38 @@
 from options import Options
-import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 
-
+    
 class BinaryLanguageClassifier(nn.Module):
-    def __init__(self, options: Options, n_input=1, n_output=1, stride=16, n_channel=32):
+    def __init__(self, options: Options, n_input=40000, n_output=1, stride=16, n_channel=32):
         super().__init__()
 
         # some of these layers might be useful
 
-        # self.conv1 = nn.Conv1d(n_input, n_channel, kernel_size=80, stride=stride)
-        # self.bn1 = nn.BatchNorm1d(n_channel)
-        # self.pool1 = nn.MaxPool1d(4)
-        # self.fc1 = nn.Linear(2 * n_channel, n_output)
+        self.conv1 = nn.Conv1d(n_input, n_channel, kernel_size=80, stride=stride)
+        #self.bn1 = nn.BatchNorm1d(n_channel)
+        self.pool1 = nn.MaxPool1d(4) # reduces the dimensionallity 
+        self.relu1 = nn.ReLU()
+        
+        self.conv2 = nn.Conv1d(n_channel, 2*n_channel, kernel_size=80, stride=stride)
+        #self.bn1 = nn.BatchNorm1d(n_channel)
+        self.pool2 = nn.MaxPool1d(4) # reduces the dimensionallity 
+        self.relu2 = nn.ReLU()
 
-
+        self.Linear_2 = nn.Linear(in_features=2*n_channel, out_features=n_output)
+        
     def forward(self, x):
 
-        # won't work yet
-
-        # x = self.conv1(x)
-        # x = F.relu(self.bn1(x))
-        # x = self.pool1(x)
-        # x = F.avg_pool1d(x, x.shape[-1])
-        # x = x.permute(0, 2, 1)
-        # x = self.fc1(x)
-        # return F.log_softmax(x, dim=2)
-
-        return
+        x = self.conv1(x)
+        x = self.relu1(x)
+        x = self.pool1(x)
+        
+        x = self.conv2(x)
+        x = self.relu2(x)
+        x = self.pool2(x)
+        
+        return F.log_softmax(x, dim=2)
 
 def train_model(model, device, train_loader):
     optimizer = optim.Adam(model.parameters(), lr=0.0001) # Another optimiser - Adam
