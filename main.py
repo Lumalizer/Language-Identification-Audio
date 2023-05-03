@@ -11,5 +11,4 @@ X_train, y_train, X_test, y_test = load_data(options)
 train_loader, test_loader = convert_tensors(X_train, y_train, X_test, y_test)
 
 # q1a_plot(options, X_train)
-model = build_model(options, X_train, y_train, X_test, y_test)
-
+model = build_model(options, train_loader, test_loader)
