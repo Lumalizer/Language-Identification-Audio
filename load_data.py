@@ -1,11 +1,10 @@
+import torch 
 import numpy as np
 from options import Options
 from q1b_normalize_data import normalize_data
 from torch.utils.data import DataLoader,TensorDataset
-import torch 
 
 def load_data(options: Options) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    sampling_rate = 8_000
     languages = ["de", "en", "es", "fr", "nl", "pt"]
     language_dict = {languages[i]: i for i in range(len(languages))}
 
@@ -22,10 +21,7 @@ def load_data(options: Options) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.
     return X_train, y_train, X_test, y_test
 
 
-
-
-def convert_tensors(X_train,y_train, X_test, y_test):
-        
+def convert_tensors(X_train, y_train, X_test, y_test, options: Options) -> tuple[DataLoader, DataLoader]:
         X_train = torch.tensor(X_train, dtype=torch.float32)
         y_train = torch.tensor(y_train, dtype=torch.long)
         X_test = torch.tensor(X_test, dtype=torch.float32)
@@ -36,8 +32,12 @@ def convert_tensors(X_train,y_train, X_test, y_test):
         test_dataset = TensorDataset(X_test, y_test)
         
         # Create PyTorch data loaders
-        batch_size = 32
-        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-        test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+        train_loader = DataLoader(train_dataset, batch_size=options.batch_size, shuffle=True)
+        test_loader = DataLoader(test_dataset, batch_size=options.batch_size, shuffle=True)
     
         return train_loader, test_loader
+
+
+def get_dataloaders(options: Options) -> tuple[DataLoader, DataLoader]:
+    train_loader, test_loader = convert_tensors(*load_data(options), options)
+    return train_loader, test_loader
