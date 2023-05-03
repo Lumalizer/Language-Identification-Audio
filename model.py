@@ -13,7 +13,7 @@ class BinaryLanguageClassifier(nn.Module):
         stride=16
         n_channel=32
 
-        self.conv1 = nn.Conv1d(options.input_size, n_channel, kernel_size=80, stride=stride)
+        self.conv1 = nn.Conv1d(1, output_size, kernel_size=40, stride=stride)
         #self.bn1 = nn.BatchNorm1d(n_channel)
         self.pool1 = nn.MaxPool1d(4) # reduces the dimensionallity 
         self.relu1 = nn.ReLU()
@@ -26,17 +26,18 @@ class BinaryLanguageClassifier(nn.Module):
         self.Linear_2 = nn.Linear(in_features=2*n_channel, out_features=output_size)
         
     def forward(self, x):
-        # x is of shape [batch_size, n_input] (32 x 40000)
-
-        x = self.conv1(x)
-        x = self.relu1(x)
-        x = self.pool1(x)
+        # x is of shape [batch_size, input_size] (32 x 40000)
+        x = x.unsqueeze(1) # x is of shape (32 x 1 x 40000)
+        x = self.conv1(x) # x is of shape (32 x 1 x 2498)
+        x = self.relu1(x) # x is of shape (32 x 1 x 2498)
+        x = self.pool1(x) # x is of shape (32 x 1 x 624)
+        x = x.squeeze() # x is of shape (32 x 624)
         
-        x = self.conv2(x)
-        x = self.relu2(x)
-        x = self.pool2(x)
+        # x = self.conv2(x)
+        # x = self.relu2(x)
+        # x = self.pool2(x)
         
-        return F.log_softmax(x, dim=2)
+        return F.log_softmax(x, dim=1)
 
 def train_model(model, train_loader, options: Options):
     optimizer = optim.Adam(model.parameters(), lr=options.lr) # Another optimiser - Adam
