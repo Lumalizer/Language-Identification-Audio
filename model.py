@@ -2,7 +2,7 @@ from options import Options
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
-
+import torch
     
 class BinaryLanguageClassifier(nn.Module):
     def __init__(self, options: Options, n_input=40000, n_output=1, stride=16, n_channel=32):
