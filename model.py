@@ -29,7 +29,7 @@ class BinaryLanguageClassifier(nn.Module):
         self.lin2 = nn.Linear(200, 2)
         self.relu5 = nn.ReLU()
 
-    def forward(self, x: torch.Tensor, debug=True):
+    def forward(self, x: torch.Tensor, debug=False):
         # x is of shape [batch_size, input_size] (32 x 40000)
         x = self.mel_spectogram_transform(x) # x is of shape (32 x 512 x 201)
 
