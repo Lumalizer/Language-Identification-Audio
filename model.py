@@ -24,7 +24,7 @@ class BinaryLanguageClassifier(nn.Module):
         self.pool2 = nn.MaxPool1d(5) # reduces the dimensionallity 
         self.relu2 = nn.ReLU()
         
-    def forward(self, x):
+    def forward(self, x: torch.Tensor):
         # x is of shape [batch_size, input_size] (32 x 40000)
         x = x.unsqueeze(1) # x is of shape (32 x 1 x 40000)
         x = self.conv1(x) # x is of shape (32 x 1 x 2498)
