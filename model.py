@@ -1,13 +1,15 @@
 from options import Options
 import torch
+import torchaudio
 import torch.nn as nn
-import torch.optim as optim
 import torch.nn.functional as F
-import torch
     
 class BinaryLanguageClassifier(nn.Module):
     def __init__(self, options: Options):
         super().__init__()
+
+        self.mel_spectogram_transform = torchaudio.transforms.MelSpectrogram(sample_rate=options.sample_rate)
+        # x = self.mel_spectogram_transform(x) # x is of shape (32 x 128 x 201)
 
         output_size = 1
         stride=16
@@ -31,10 +33,11 @@ class BinaryLanguageClassifier(nn.Module):
         x = self.pool2(x) # x is of shape (32 x 1 x 6)
         x = x.squeeze(1) # x is of shape (32 x 6)
         return F.log_softmax(x, dim=1)
+    
 
 def train_model(model, train_loader, options: Options):
-    optimizer = optim.Adam(model.parameters(), lr=options.lr) # Another optimiser - Adam
-    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.1)  # reduce the learning after 20 epochs by a factor of 10
+    optimizer = torch.optim.Adam(model.parameters(), lr=options.lr) # Another optimiser - Adam
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.1)  # reduce the learning after 20 epochs by a factor of 10
     crossentropy_loss = nn.CrossEntropyLoss() 
     
     model.train()
