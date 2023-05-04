@@ -3,35 +3,36 @@ import torch
 import torchaudio
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.utils.data import DataLoader
     
 class BinaryLanguageClassifier(nn.Module):
     def __init__(self, options: Options):
         super().__init__()
 
         self.mel_spectogram_transform = torchaudio.transforms.MelSpectrogram(sample_rate=options.sample_rate)
-        # x = self.mel_spectogram_transform(x) # x is of shape (32 x 128 x 201)
+        stride=6
 
-        output_size = 1
-        stride=16
-
-        self.conv1 = nn.Conv1d(1, output_size, kernel_size=40, stride=stride)
-        #self.bn1 = nn.BatchNorm1d(n_channel)
-        self.pool1 = nn.MaxPool1d(4) # reduces the dimensionallity 
-        self.relu1 = nn.ReLU()
+        self.conv1 = nn.Conv2d(1, 1, kernel_size=(12, 20), stride=stride)
+        self.lin1 = nn.Linear(620, 2)
         
-        self.conv2 = nn.Conv1d(1, 1, kernel_size=120, stride=stride)
-        #self.bn1 = nn.BatchNorm1d(n_channel)
-        self.pool2 = nn.MaxPool1d(5) # reduces the dimensionallity 
-        self.relu2 = nn.ReLU()
-        
-    def forward(self, x: torch.Tensor):
+    def forward(self, x: torch.Tensor, debug=False):
         # x is of shape [batch_size, input_size] (32 x 40000)
-        x = x.unsqueeze(1) # x is of shape (32 x 1 x 40000)
-        x = self.conv1(x) # x is of shape (32 x 1 x 2498)
-        x = self.pool1(x) # x is of shape (32 x 1 x 624)
-        x = self.conv2(x) # x is of shape (32 x 1 x 32)
-        x = self.pool2(x) # x is of shape (32 x 1 x 6)
-        x = x.squeeze(1) # x is of shape (32 x 6)
+        x = self.mel_spectogram_transform(x) # x is of shape (32 x 128 x 201)
+        
+        x = x.unsqueeze(1) # x is of shape (32 x 1 x 128 x 201)
+        debug and print(x.shape)
+
+        x = self.conv1(x) # x is of shape (32 x 1 x 20 x 31)
+        debug and print(x.shape)
+
+        x = x.flatten(2) # x is of shape (32, 1, 620)
+        debug and print(x.shape)
+
+        x = self.lin1(x) # x is of shape (32, 1, 2)
+        debug and print(x.shape)
+
+        x = x.squeeze(1) # x is of shape (32, 2)
+        debug and print(x.shape)
         return F.log_softmax(x, dim=1)
     
 
@@ -50,7 +51,6 @@ def train_model(model, train_loader, options: Options):
             loss = crossentropy_loss(predictions, labels) 
             loss.backward() 
             optimizer.step()
-    
     return model
 
 def test_model(model, test_loader, options: Options):

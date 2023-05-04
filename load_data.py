@@ -37,6 +37,19 @@ def convert_tensors(X_train, y_train, X_test, y_test, options: Options) -> tuple
     
         return train_loader, test_loader
 
+def english_spanish_data(X_train, y_train, X_test, y_test) -> tuple[DataLoader, DataLoader]:
+    X_train = np.array([X_train[i] for i in range(len(X_train)) if y_train[i] == 1 or y_train[i] == 2])
+    y_train = np.array([y_train[i] for i in range(len(y_train)) if y_train[i] == 1 or y_train[i] == 2]) - 1
+
+    X_test = np.array([X_test[i] for i in range(len(X_test)) if y_test[i] == 1 or y_test[i] == 2])
+    y_test = np.array([y_test[i] for i in range(len(y_test)) if y_test[i] == 1 or y_test[i] == 2]) - 1
+
+    return X_train, y_train, X_test, y_test
+
+
+def get_english_spanish_dataloaders(options: Options) -> tuple[DataLoader, DataLoader]:
+    train_loader, test_loader = convert_tensors(*english_spanish_data(*load_data(options)), options)
+    return train_loader, test_loader
 
 def get_dataloaders(options: Options) -> tuple[DataLoader, DataLoader]:
     train_loader, test_loader = convert_tensors(*load_data(options), options)
