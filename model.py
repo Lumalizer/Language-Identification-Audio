@@ -35,6 +35,8 @@ class BinaryLanguageClassifier(nn.Module):
         # x is of shape [batch_size, input_size] (32 x 40000)
         x = self.mel_spectogram_transform(x)  # x is of shape (32 x 512 x 201)
 
+        x = x.log2()  # recode spectogram in log scale (less tiny values)
+
         x = x.unsqueeze(1)  # x is of shape (32 x 1 x 512 x 201)
         debug and print(x.shape)
 
