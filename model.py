@@ -1,96 +1,86 @@
 from options import Options
 import torch
-import torchaudio
+from torchaudio.transforms import MelSpectrogram
 import torch.nn as nn
-import torch.nn.functional as F
-from torch.utils.data import DataLoader
 
 
 class BinaryLanguageClassifier(nn.Module):
     def __init__(self, options: Options):
         super().__init__()
 
-        self.mel_spectogram_transform = torchaudio.transforms.MelSpectrogram(
-            sample_rate=options.sample_rate, normalized=True, n_mels=512)
+        self.mel_spectogram_transform = MelSpectrogram(sample_rate=options.sample_rate)
 
-        self.conv1 = nn.Conv2d(1, 1, kernel_size=(4, 2))
+        self.conv1 = nn.Conv2d(1, 1, kernel_size=(3, 3))
+        self.maxpool1 = nn.MaxPool2d(kernel_size=2)
         self.relu1 = nn.ReLU()
-        self.maxpool1 = nn.MaxPool2d(kernel_size=(4, 2))
 
         self.conv2 = nn.Conv2d(1, 1, kernel_size=(4, 4))
-        self.relu2 = nn.ReLU()
-        self.maxpool2 = nn.MaxPool2d(kernel_size=(3, 2))
+        self.maxpool2 = nn.MaxPool2d(kernel_size=2)
 
         self.conv3 = nn.Conv2d(1, 1, kernel_size=(3, 3))
-        self.relu3 = nn.ReLU()
-        self.maxpool3 = nn.MaxPool2d(kernel_size=(2, 2))
+        self.maxpool3 = nn.MaxPool2d(kernel_size=2)
 
-        self.lin1 = nn.Linear(437, 200)
-        self.relu4 = nn.ReLU()
-
+        self.lin1 = nn.Linear(1440, 200)
         self.lin2 = nn.Linear(200, 2)
-        self.relu5 = nn.ReLU()
 
     def forward(self, x: torch.Tensor, debug=False):
         # x is of shape [batch_size, input_size] (32 x 40000)
-        x = self.mel_spectogram_transform(x)  # x is of shape (32 x 512 x 201)
+        x = self.mel_spectogram_transform(x)  # x is of shape (32 x 128 x 201)
 
-        x = x.log2()  # recode spectogram in log scale (less tiny values)
-
-        x = x.unsqueeze(1)  # x is of shape (32 x 1 x 512 x 201)
+        x = x.unsqueeze(1)  # x is of shape (32 x 1 x 128 x 201)
         debug and print(x.shape)
 
-        x = self.conv1(x)  # x is of shape (32 x 1 x 509 x 200)
+        x = self.conv1(x)  # x is of shape (32 x 1 x 125 x 198)
+        debug and print(x.shape)
+        x = self.maxpool1(x)  # x is of shape (32 x 1 x 62 x 99)
+        debug and print(x.shape)
         x = self.relu1(x)
-        debug and print(x.shape)
-        x = self.maxpool1(x)  # x is of shape (32 x 1 x 127 x 100)
-        debug and print(x.shape)
 
-        x = self.conv2(x)  # x is of shape (32 x 1 x 124 x 97)
-        x = self.relu2(x)
+        x = self.conv2(x)  # x is of shape (32 x 1 x 59 x 96)
         debug and print(x.shape)
-        x = self.maxpool2(x)  # x is of shape (32 x 1 x 41 x 48)
+        x = self.maxpool2(x)  # x is of shape (32 x 1 x 29 x 48)
         debug and print(x.shape)
+        x = self.relu1(x)
 
-        x = self.conv3(x)  # x is of shape (32 x 1 x 39 x 46)
-        x = self.relu3(x)
-        debug and print(x.shape)
-        x = self.maxpool3(x)  # x is of shape (32 x 1 x 19 x 23)
-        debug and print(x.shape)
+        # disabled layergroup 3 for now
 
-        x = x.flatten(2)  # x is of shape (32, 1, 437)
+        x = x.flatten(2)  # x is of shape (32, 1, 1392)
         debug and print(x.shape)
 
         x = self.lin1(x)  # x is of shape (32, 1, 200)
-        x = self.relu4(x)
+        x = self.relu1(x)
         debug and print(x.shape)
 
         x = self.lin2(x)  # x is of shape (32, 1, 2)
-        x = self.relu5(x)
+        x = self.relu1(x)
         debug and print(x.shape)
 
         x = x.squeeze(1)  # x is of shape (32, 2)
         debug and print(x.shape)
-        return F.log_softmax(x, dim=1)
+
+        return x # don't use softmax, because we use crossentropy loss which directly takes logits
 
 
 def train_model(model, train_loader, options: Options):
-    # Another optimiser - Adam
     optimizer = torch.optim.Adam(model.parameters(), lr=options.lr)
     # reduce the learning after 20 epochs by a factor of 10
-    scheduler = torch.optim.lr_scheduler.StepLR(
-        optimizer, step_size=20, gamma=0.1)
+    # scheduler = torch.optim.lr_scheduler.StepLR(
+    #     optimizer, step_size=5, gamma=0.5)
     crossentropy_loss = nn.CrossEntropyLoss()
 
     model.train()
     for epoch in range(options.n_epochs):
         print(f"{epoch} / {options.n_epochs}", flush=True)
         for data, labels in train_loader:
+            optimizer.zero_grad()
             data = data.to(options.device)
             labels = labels.to(options.device)
-            optimizer.zero_grad()
             predictions = model(data)
             loss = crossentropy_loss(predictions, labels)
+            # sometimes predictions are just around 0, which leads to random accuracy
+            # could be due to vanishing gradients or too small numbers somehow ?
+            # print(predictions)
+            # print(loss)
             loss.backward()
             optimizer.step()
     return model
