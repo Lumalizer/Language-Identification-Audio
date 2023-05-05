@@ -2,13 +2,16 @@ from options import Options
 import torch
 from torchaudio.transforms import MelSpectrogram
 import torch.nn as nn
+import os
 
 
 class BinaryLanguageClassifier(nn.Module):
     def __init__(self, options: Options):
         super().__init__()
+        self.options = options
 
-        self.mel_spectogram_transform = MelSpectrogram(sample_rate=options.sample_rate)
+        self.mel_spectogram_transform = MelSpectrogram(
+            sample_rate=options.sample_rate)
 
         self.conv1 = nn.Conv2d(1, 1, kernel_size=(3, 3))
         self.maxpool1 = nn.MaxPool2d(kernel_size=2)
@@ -22,6 +25,8 @@ class BinaryLanguageClassifier(nn.Module):
 
         self.lin1 = nn.Linear(1440, 200)
         self.lin2 = nn.Linear(200, 2)
+
+        print(f"Model initialized on {options.device}")
 
     def forward(self, x: torch.Tensor, debug=False):
         # x is of shape [batch_size, input_size] (32 x 40000)
@@ -58,7 +63,17 @@ class BinaryLanguageClassifier(nn.Module):
         x = x.squeeze(1)  # x is of shape (32, 2)
         debug and print(x.shape)
 
-        return x # don't use softmax, because we use crossentropy loss which directly takes logits
+        return x  # don't use softmax, because we use crossentropy loss which directly takes logits
+
+    def save(self):
+        if not os.path.exists(self.options.model_path):
+            os.makedirs(self.options.model_path)
+        torch.save(self.state_dict(), os.path.join(
+            self.options.model_path, "model_state_dict.pt"))
+
+        # NOTE: This fails. Problem may have to do with: "Script module creation requires that the model's operations be traceable, so certain types of operations may not be supported."
+        # torch.jit.save(torch.jit.script(self), os.path.join(
+        #     self.options.model_path, "model.pt"))
 
 
 def train_model(model, train_loader, options: Options):
@@ -70,8 +85,7 @@ def train_model(model, train_loader, options: Options):
 
     model.train()
     for epoch in range(options.n_epochs):
-        print(f"{epoch} / {options.n_epochs}", flush=True)
-        for data, labels in train_loader:
+        for batch_i, (data, labels) in enumerate(train_loader):
             optimizer.zero_grad()
             data = data.to(options.device)
             labels = labels.to(options.device)
@@ -83,6 +97,9 @@ def train_model(model, train_loader, options: Options):
             # print(loss)
             loss.backward()
             optimizer.step()
+            print(
+                f"Training: Epoch {epoch} / {options.n_epochs} Batch {batch_i} / {len(train_loader)} Loss {loss.item()}", end="\r")
+    print("\n")
     return model
 
 

@@ -9,3 +9,4 @@ train_loader, test_loader = get_english_spanish_dataloaders(options)
 
 # q1a_plot(options, X_train)
 model = build_model(options, train_loader, test_loader)
+model.save()
