@@ -26,6 +26,8 @@ class BinaryLanguageClassifier(nn.Module):
         self.lin1 = nn.Linear(1440, 200)
         self.lin2 = nn.Linear(200, 2)
 
+        self.to(options.device)
+
         print(f"Model initialized on {options.device}")
 
     def forward(self, x: torch.Tensor, debug=False):
@@ -65,15 +67,22 @@ class BinaryLanguageClassifier(nn.Module):
 
         return x  # don't use softmax, because we use crossentropy loss which directly takes logits
 
-    def save(self):
-        if not os.path.exists(self.options.model_path):
-            os.makedirs(self.options.model_path)
-        torch.save(self.state_dict(), os.path.join(
-            self.options.model_path, "model_state_dict.pt"))
 
-        # NOTE: This fails. Problem may have to do with: "Script module creation requires that the model's operations be traceable, so certain types of operations may not be supported."
-        # torch.jit.save(torch.jit.script(self), os.path.join(
-        #     self.options.model_path, "model.pt"))
+def save_model_weights(model: nn.Module, options: Options, name="model_state_dict.pt"):
+    if not os.path.exists(options.model_path):
+        os.makedirs(options.model_path)
+    torch.save(model.state_dict(), os.path.join(
+        options.model_path, name))
+
+    # NOTE: This fails. Problem may have to do with: "Script module creation requires that the model's operations be traceable, so certain types of operations may not be supported."
+    # torch.jit.save(torch.jit.script(model), os.path.join(
+    #     options.model_path, name))
+
+
+def load_model_weights(model: nn.Module, options: Options, name="model_state_dict.pt"):
+    model.load_state_dict(torch.load(os.path.join(
+        options.model_path, name)))
+    return model
 
 
 def train_model(model, train_loader, options: Options):
