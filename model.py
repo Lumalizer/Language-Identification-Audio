@@ -97,9 +97,7 @@ def load_model_weights(model: nn.Module, options: Options, name="model_state_dic
 
 def train_model(model, train_loader, options: Options):
     optimizer = torch.optim.Adam(model.parameters(), lr=options.lr)
-    # reduce the learning after 20 epochs by a factor of 10
-    # scheduler = torch.optim.lr_scheduler.StepLR(
-    #     optimizer, step_size=5, gamma=0.5)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.2)
 
     loss_function = nn.CrossEntropyLoss()
     model.train()
