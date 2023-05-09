@@ -2,17 +2,18 @@ import torch
 import torch.nn as nn
 from options import Options
 from torchaudio.transforms import MelSpectrogram
-from load_data import get_english_spanish_dataloaders
-from model import test_model, train_model, save_model_weights, load_model_weights
+from load_data import get_dataloaders
 import logging
 import os
 
 
 class LanguageClassifier(nn.Module):
-    def __init__(self, num_languages, options):
+    def __init__(self, options):
         super(LanguageClassifier, self).__init__()
-
         logging.info("Initializing model...")
+
+        self.options = options
+        self.num_languages = 6 if options.use_all_languages else 2
 
         self.mel_spectogram_transform = MelSpectrogram(
             sample_rate=options.sample_rate,
@@ -44,7 +45,7 @@ class LanguageClassifier(nn.Module):
         self.lstm = nn.LSTM(input_size=2176, hidden_size=256,
                             num_layers=2, batch_first=True, bidirectional=True)
 
-        self.fc = nn.Linear(512, num_languages)
+        self.fc = nn.Linear(512, self.num_languages)
 
         self.to(options.device)
         logging.info(f"Model initialized on {options.device}")
@@ -78,19 +79,71 @@ class LanguageClassifier(nn.Module):
         x = self.fc(x)
 
         return x
+    
+def save_model_weights(model: nn.Module, options: Options, name="model_state_dict.pt"):
+    if not os.path.exists(options.model_path):
+        os.makedirs(options.model_path)
+    torch.save(model.state_dict(), os.path.join(
+        options.model_path, name))
+    
+    # NOTE: This fails. Problem may have to do with: "Script module creation requires that the model's operations be traceable, so certain types of operations may not be supported."
+    # torch.jit.save(torch.jit.script(model), os.path.join(
+    #     options.model_path, name))
+
+def load_model_weights(model: nn.Module, options: Options, name="model_state_dict.pt"):
+    model.load_state_dict(torch.load(os.path.join(
+        options.model_path, name)))
+    return model
+
+def train_model(model, train_loader, options: Options):
+    optimizer = torch.optim.Adam(model.parameters(), lr=options.lr)
+    # reduce the learning after 20 epochs by a factor of 10
+    # scheduler = torch.optim.lr_scheduler.StepLR(
+    #     optimizer, step_size=5, gamma=0.5)
+
+    loss_function = nn.CrossEntropyLoss()
+    model.train()
+
+    for epoch in range(options.n_epochs):
+        for batch_i, (data, labels) in enumerate(train_loader):
+            optimizer.zero_grad()
+            data = data.to(options.device)
+            labels = labels.to(options.device)
+            predictions = model(data)
+            loss = loss_function(predictions, labels)
+            loss.backward()
+            optimizer.step()
+            print(
+                f"Training: Epoch {epoch} / {options.n_epochs} Batch {batch_i} / {len(train_loader)} Loss {loss.item()}", end="\r")
+    print("\n")
+    return model
+
+def test_model(model, test_loader, options: Options):
+    model.eval()
+    test_acc = 0
+    for data, labels in test_loader:
+        data = data.to(options.device)
+        labels = labels.to(options.device)
+        predictions = model(data)
+        accuracy = (torch.max(predictions, dim=-1, keepdim=True)
+                    [1].flatten() == labels).sum() / len(labels)
+        test_acc += accuracy.item()
+    test_acc /= len(test_loader)
+    return f"Test accuracy {test_acc}"
+
+def build_model(options: Options, train_loader, test_loader):
+    model = LanguageClassifier(options)
+    train_model(model, train_loader, options)
+    print(test_model(model, test_loader, options))
+    return model
 
 
 if __name__ == "__main__":
-
     logging.basicConfig(level=logging.INFO, format='%(message)s')
-
-    options = Options()
-
-    train_loader, test_loader = get_english_spanish_dataloaders(options)
-
+    options = Options(use_all_languages=True)
+    train_loader, test_loader = get_dataloaders(options)
     model = LanguageClassifier(2, options)
-
-    model = load_model_weights(model, options, "model3_state_dict.pt")
-    #train_model(model, train_loader, options)
+    #model = load_model_weights(model, options, "model3_state_dict.pt")
+    train_model(model, train_loader, options)
     print(test_model(model, test_loader, options))
-    #save_model_weights(model, options, "model3_state_dict.pt")
+    save_model_weights(model, options, f"model_{model.num_languages}languages_state_dict.pt")

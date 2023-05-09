@@ -46,11 +46,9 @@ def english_spanish_data(X_train, y_train, X_test, y_test) -> tuple[DataLoader, 
 
     return X_train, y_train, X_test, y_test
 
-
-def get_english_spanish_dataloaders(options: Options) -> tuple[DataLoader, DataLoader]:
-    train_loader, test_loader = convert_tensors(*english_spanish_data(*load_data(options)), options)
-    return train_loader, test_loader
-
 def get_dataloaders(options: Options) -> tuple[DataLoader, DataLoader]:
-    train_loader, test_loader = convert_tensors(*load_data(options), options)
+    if options.use_all_languages:
+        train_loader, test_loader = convert_tensors(*load_data(options), options)
+    else:
+        train_loader, test_loader = convert_tensors(*english_spanish_data(*load_data(options)), options)
     return train_loader, test_loader
