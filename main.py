@@ -10,5 +10,5 @@ train_loader, test_loader = get_dataloaders(options)
 
 # q1a_plot(options, X_train)
 model, train_losses, test_losses = build_model(options, train_loader, test_loader)
-q3a_plot(options, train_losses, test_losses)
+# q3a_plot(options, train_losses, test_losses)
 save_model_weights(model, options)

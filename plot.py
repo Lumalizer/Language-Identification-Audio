@@ -15,14 +15,17 @@ def q1a_plot(options: Options, X_train):
         axs[i].set(xlabel='time (ms)', ylabel='Amplitude', ylim=limits)
 
     plt.subplots_adjust(hspace=.4)
+    plt.savefig("q1a_plot.png")
     plt.show()
 
 def q3a_plot(options: Options, train_losses, test_losses):
-    assert options.use_all_languages == False
+    assert options.record_intermediate_losses and not options.use_all_languages
     plt.figure(figsize=(15, 10))
     plt.plot(train_losses, label="Train Loss")
     plt.plot(test_losses, label="Test Loss")
     plt.legend()
     plt.xlabel("Steps (10 batches per step)")
     plt.ylabel("Loss (Cross Entropy)")
+    plt.title("Loss vs. Steps")
+    plt.savefig("q3a_plot.png")
     plt.show()

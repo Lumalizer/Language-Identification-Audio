@@ -154,7 +154,10 @@ def build_model(options: Options, train_loader, test_loader):
     train_losses = []
     test_losses = []
 
-    loss_function = nn.CrossEntropyLoss() if options.use_all_languages else nn.BCELoss()
+    loss_function = nn.CrossEntropyLoss()
+
+    # BCE would be best, but expects 
+    # loss_function = nn.CrossEntropyLoss() if options.use_all_languages else nn.BCELoss()
     get_test_loss_during_training = lambda model: test_model(model, test_loader, loss_function, test_losses,
                                               options)
 
