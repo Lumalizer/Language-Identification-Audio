@@ -16,3 +16,13 @@ def q1a_plot(options: Options, X_train):
 
     plt.subplots_adjust(hspace=.4)
     plt.show()
+
+def q3a_plot(options: Options, train_losses, test_losses):
+    assert options.use_all_languages == False
+    plt.figure(figsize=(15, 10))
+    plt.plot(train_losses, label="Train Loss")
+    plt.plot(test_losses, label="Test Loss")
+    plt.legend()
+    plt.xlabel("Steps (10 batches per step)")
+    plt.ylabel("Loss (Cross Entropy)")
+    plt.show()

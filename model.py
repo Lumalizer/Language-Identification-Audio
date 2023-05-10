@@ -53,7 +53,7 @@ class LanguageClassifier(nn.Module):
     def forward(self, x):
         # torch no_grad is used since we don't want to save the gradient
         # for the pre-processing steps
-        if options.normalize:
+        if self.options.normalize:
             with torch.no_grad():
                 x = F.normalize(x, p=2, dim=1) # L2 normalization
 
@@ -101,19 +101,23 @@ def load_model_weights(model: nn.Module, options: Options, name="model_state_dic
         options.model_path, name)))
     return model
 
-def train_model(model, train_loader, options: Options):
+def train_model(model, train_loader, loss_function, train_losses, get_intermediate_test_loss, options: Options):
     optimizer = torch.optim.Adam(model.parameters(), lr=options.lr)
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.2)
 
-    loss_function = nn.CrossEntropyLoss() if options.use_all_languages else nn.BCELoss()
     model.train()
     for epoch in range(options.n_epochs):
         for batch_i, (data, labels) in enumerate(train_loader):
             optimizer.zero_grad()
             data = data.to(options.device)
             labels = labels.to(options.device)
+
             predictions = model(data)
             loss = loss_function(predictions, labels)
+
+            if not batch_i % 10:
+                train_losses.append(loss.item())
+                get_intermediate_test_loss(model)
+
             loss.backward()
             optimizer.step()
             print(
@@ -121,24 +125,44 @@ def train_model(model, train_loader, options: Options):
     print("\n")
     return model
 
-def test_model(model, test_loader, options: Options):
+def test_model(model, test_loader, loss_function, test_losses, options: Options):
     model.eval()
     test_acc = 0
+    temp_losses = []
+
     for data, labels in test_loader:
         data = data.to(options.device)
         labels = labels.to(options.device)
         predictions = model(data)
+
+        if options.record_intermediate_losses:
+            loss = loss_function(predictions, labels)
+            temp_losses.append(float(loss) / options.batch_size)
+
         accuracy = (torch.max(predictions, dim=-1, keepdim=True)
                     [1].flatten() == labels).sum() / len(labels)
         test_acc += accuracy.item()
+
+    if options.record_intermediate_losses:
+        test_losses.append(sum(temp_losses) / len(temp_losses))
+        temp_losses = []
+
     test_acc /= len(test_loader)
     return f"Test accuracy {test_acc}"
 
 def build_model(options: Options, train_loader, test_loader):
+    train_losses = []
+    test_losses = []
+
+    loss_function = nn.CrossEntropyLoss() if options.use_all_languages else nn.BCELoss()
+    get_test_loss_during_training = lambda model: test_model(model, test_loader, loss_function, test_losses,
+                                              options)
+
     model = LanguageClassifier(options)
-    train_model(model, train_loader, options)
-    print(test_model(model, test_loader, options))
-    return model
+    train_model(model, train_loader, loss_function, train_losses, get_test_loss_during_training, options)
+    test_model(model, test_loader, loss_function, test_losses, options)
+
+    return model, train_losses, test_losses
 
 
 if __name__ == "__main__":

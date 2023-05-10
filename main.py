@@ -1,5 +1,5 @@
 from options import Options
-from q1a_plot import q1a_plot
+from plot import q1a_plot, q3a_plot
 from model import build_model, save_model_weights
 from load_data import get_dataloaders
 
@@ -9,5 +9,6 @@ print(options)
 train_loader, test_loader = get_dataloaders(options)
 
 # q1a_plot(options, X_train)
-model = build_model(options, train_loader, test_loader)
+model, train_losses, test_losses = build_model(options, train_loader, test_loader)
+q3a_plot(options, train_losses, test_losses)
 save_model_weights(model, options)
