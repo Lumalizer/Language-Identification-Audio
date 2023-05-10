@@ -5,7 +5,7 @@ from torchaudio.transforms import MelSpectrogram
 from load_data import get_dataloaders
 import logging
 import os
-
+import torch.nn.functional as F
 
 class LanguageClassifier(nn.Module):
     def __init__(self, options):
@@ -51,6 +51,12 @@ class LanguageClassifier(nn.Module):
         logging.info(f"Model initialized on {options.device}")
 
     def forward(self, x):
+        # torch no_grad is used since we don't want to save the gradient
+        # for the pre-processing steps
+        if options.normalize:
+            with torch.no_grad():
+                x = F.normalize(x, p=2, dim=1) # L2 normalization
+
         x = self.mel_spectogram_transform(x)
         x = x.unsqueeze(1)
 
@@ -99,9 +105,8 @@ def train_model(model, train_loader, options: Options):
     optimizer = torch.optim.Adam(model.parameters(), lr=options.lr)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.2)
 
-    loss_function = nn.CrossEntropyLoss()
+    loss_function = nn.CrossEntropyLoss() if options.use_all_languages else nn.BCELoss()
     model.train()
-
     for epoch in range(options.n_epochs):
         for batch_i, (data, labels) in enumerate(train_loader):
             optimizer.zero_grad()
@@ -140,8 +145,8 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(message)s')
     options = Options(use_all_languages=True)
     train_loader, test_loader = get_dataloaders(options)
-    model = LanguageClassifier(2, options)
+    model = LanguageClassifier(options)
     #model = load_model_weights(model, options, "model3_state_dict.pt")
     train_model(model, train_loader, options)
     print(test_model(model, test_loader, options))
-    save_model_weights(model, options, f"model_{model.num_languages}languages_state_dict.pt")
+    # save_model_weights(model, options, f"model_{model.num_languages}languages_state_dict.pt")

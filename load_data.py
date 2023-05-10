@@ -13,8 +13,8 @@ def load_data(options: Options) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.
     X_test, y_test = np.load("dataset/inputs_test_fp16.npy"), np.load(
         "dataset/targets_test_int8.npy")
 
-    if options.normalize:
-        X_train, X_test = normalize_data(X_train, X_test)
+    # if options.normalize:
+    #     X_train, X_test = normalize_data(X_train, X_test)
 
     X_train, X_test = X_train.astype(np.float32), X_test.astype(np.float32)
 
