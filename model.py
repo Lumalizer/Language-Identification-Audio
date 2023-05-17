@@ -7,6 +7,7 @@ import logging
 import os
 import torch.nn.functional as F
 
+
 class LanguageClassifier(nn.Module):
     def __init__(self, options: Options):
         super(LanguageClassifier, self).__init__()
@@ -17,12 +18,12 @@ class LanguageClassifier(nn.Module):
 
         self.mel_spectogram_transform = MelSpectrogram(
             sample_rate=options.sample_rate,
-            n_fft = 512, # Higher n_fft, higher frequency resolution you get.
-            hop_length = 256, # Smaller hop_length, higher time resolution.
-            n_mels = 40,
-            f_max = options.sample_rate / 2, # the Nyquist frequency -> 0.5 of the sampling rate
-            norm = 'slaney' 
-            )
+            n_fft=512,  # Higher n_fft, higher frequency resolution you get.
+            hop_length=256,  # Smaller hop_length, higher time resolution.
+            n_mels=40,
+            f_max=options.sample_rate / 2,  # the Nyquist frequency -> 0.5 of the sampling rate
+            norm='slaney'
+        )
 
         self.conv1 = nn.Conv2d(1, 64, kernel_size=(
             5, 5), stride=(1, 1), padding=(1, 1))
@@ -54,9 +55,9 @@ class LanguageClassifier(nn.Module):
         # torch no_grad is used since we don't want to save the gradient
         # for the pre-processing steps
         with torch.no_grad():
-            x = F.normalize(x, p=2.0, dim=1) # L2 normalization
+            x = F.normalize(x, p=2.0, dim=1)  # L2 normalization
             x = self.mel_spectogram_transform(x)
-        
+
         x = x.unsqueeze(1)
 
         x = self.conv1(x)
@@ -83,22 +84,31 @@ class LanguageClassifier(nn.Module):
 
         x = self.fc(x)
         return x
-    
+
+
 def save_model_weights(model: nn.Module, options: Options, name="model_state_dict.pt"):
     if not os.path.exists(options.model_path):
         os.makedirs(options.model_path)
     torch.save(model.state_dict(), os.path.join(
         options.model_path, name))
-    
+
     torch.jit.save(torch.jit.script(model), os.path.join(
         options.model_path, f"JIT_{name}"))
+
 
 def load_model_weights(model: nn.Module, options: Options, name="model_state_dict.pt"):
     model.load_state_dict(torch.load(os.path.join(
         options.model_path, name)))
     return model
 
-def train_model(model, train_loader, loss_function, train_losses, get_intermediate_test_loss, options: Options):
+
+def load_jit_model(options: Options, name="JIT_model_state_dict.pt"):
+    model = torch.jit.load(os.path.join(
+        options.model_path, name))
+    return model
+
+
+def train_model(model: LanguageClassifier, train_loader, loss_function, train_losses, get_intermediate_test_loss, options: Options):
     optimizer = torch.optim.Adam(model.parameters(), lr=options.lr)
 
     model.train()
@@ -111,9 +121,10 @@ def train_model(model, train_loader, loss_function, train_losses, get_intermedia
             predictions = model(data)
             loss = loss_function(predictions, labels)
 
-            if not batch_i % 10:
-                train_losses.append(loss.item())
-                get_intermediate_test_loss(model)
+            # if not batch_i % 10:
+            #     train_losses.append(loss.item())
+            #     get_intermediate_test_loss(model)
+            #     model.train()
 
             loss.backward()
             optimizer.step()
@@ -122,7 +133,8 @@ def train_model(model, train_loader, loss_function, train_losses, get_intermedia
     print("\n")
     return model
 
-def test_model(model, test_loader, loss_function, test_losses, options: Options):
+
+def test_model(model: LanguageClassifier, test_loader, loss_function, test_losses, options: Options):
     model.eval()
     test_acc = 0
     temp_losses = []
@@ -147,19 +159,21 @@ def test_model(model, test_loader, loss_function, test_losses, options: Options)
     test_acc /= len(test_loader)
     return f"Test accuracy {test_acc}"
 
+
 def build_model(options: Options, train_loader, test_loader):
     train_losses = []
     test_losses = []
 
     loss_function = nn.CrossEntropyLoss()
 
-    # BCE would be best, but expects 
+    # BCE would be best, but expects
     # loss_function = nn.CrossEntropyLoss() if options.use_all_languages else nn.BCELoss()
-    get_test_loss_during_training = lambda model: test_model(model, test_loader, loss_function, test_losses,
-                                              options)
+    def get_test_loss_during_training(model): return test_model(model, test_loader, loss_function, test_losses,
+                                                                options)
 
     model = LanguageClassifier(options)
-    train_model(model, train_loader, loss_function, train_losses, get_test_loss_during_training, options)
+    train_model(model, train_loader, loss_function, train_losses,
+                get_test_loss_during_training, options)
     test_model(model, test_loader, loss_function, test_losses, options)
 
     return model, train_losses, test_losses
@@ -169,8 +183,10 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(message)s')
     options = Options(use_all_languages=True)
     train_loader, test_loader = get_dataloaders(options)
-    model = LanguageClassifier(options)
+    model = load_jit_model(options, "JIT_model_state_dict.pt")
     #model = load_model_weights(model, options, "model3_state_dict.pt")
-    train_model(model, train_loader, options)
-    print(test_model(model, test_loader, options))
+    # train_model(model, train_loader, options)
+    test_losses = []
+    loss_function = nn.CrossEntropyLoss()
+    print(test_model(model, test_loader, loss_function, test_losses, options))
     # save_model_weights(model, options, f"model_{model.num_languages}languages_state_dict.pt")
