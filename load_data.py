@@ -29,8 +29,8 @@ def get_dataloaders(options: Options) -> tuple[DataLoader, DataLoader]:
         
         train_dataset = TensorDataset(torch.tensor(X_train, dtype=torch.float32), torch.tensor(y_train, dtype=torch.long))
         test_dataset = TensorDataset(torch.tensor(X_test, dtype=torch.float32), torch.tensor(y_test, dtype=torch.long))
-        
+
         train_loader = DataLoader(train_dataset, batch_size=options.batch_size, shuffle=True)
         test_loader = DataLoader(test_dataset, batch_size=options.batch_size, shuffle=True)
-    
+
         return train_loader, test_loader

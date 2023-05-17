@@ -8,7 +8,7 @@ import os
 import torch.nn.functional as F
 
 class LanguageClassifier(nn.Module):
-    def __init__(self, options):
+    def __init__(self, options: Options):
         super(LanguageClassifier, self).__init__()
         logging.info("Initializing model...")
 
@@ -50,14 +50,13 @@ class LanguageClassifier(nn.Module):
         self.to(options.device)
         logging.info(f"Model initialized on {options.device}")
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor):
         # torch no_grad is used since we don't want to save the gradient
         # for the pre-processing steps
-        if self.options.normalize:
-            with torch.no_grad():
-                x = F.normalize(x, p=2, dim=1) # L2 normalization
-
-        x = self.mel_spectogram_transform(x)
+        with torch.no_grad():
+            x = F.normalize(x, p=2.0, dim=1) # L2 normalization
+            x = self.mel_spectogram_transform(x)
+        
         x = x.unsqueeze(1)
 
         x = self.conv1(x)
@@ -83,7 +82,6 @@ class LanguageClassifier(nn.Module):
         x = x[:, -1, :]
 
         x = self.fc(x)
-
         return x
     
 def save_model_weights(model: nn.Module, options: Options, name="model_state_dict.pt"):
@@ -92,9 +90,8 @@ def save_model_weights(model: nn.Module, options: Options, name="model_state_dic
     torch.save(model.state_dict(), os.path.join(
         options.model_path, name))
     
-    # NOTE: This fails. Problem may have to do with: "Script module creation requires that the model's operations be traceable, so certain types of operations may not be supported."
-    # torch.jit.save(torch.jit.script(model), os.path.join(
-    #     options.model_path, name))
+    torch.jit.save(torch.jit.script(model), os.path.join(
+        options.model_path, f"JIT_{name}"))
 
 def load_model_weights(model: nn.Module, options: Options, name="model_state_dict.pt"):
     model.load_state_dict(torch.load(os.path.join(
