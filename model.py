@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from options import Options
-from torchaudio.transforms import MelSpectrogram
+from torchaudio.transforms import MelSpectrogram, MFCC
 from load_data import get_dataloaders
 import logging
 import os
@@ -18,33 +18,49 @@ class LanguageClassifier(nn.Module):
 
         self.mel_spectogram_transform = MelSpectrogram(
             sample_rate=options.sample_rate,
-            n_fft=512,  # Higher n_fft, higher frequency resolution you get.
+            n_fft=1024,  # Higher n_fft, higher frequency resolution you get.
             hop_length=256,  # Smaller hop_length, higher time resolution.
             n_mels=40,
             f_max=options.sample_rate / 2,  # the Nyquist frequency -> 0.5 of the sampling rate
             norm='slaney'
         )
 
-        self.conv1 = nn.Conv2d(1, 64, kernel_size=(
-            5, 5), stride=(1, 1), padding=(1, 1))
-        self.bn1 = nn.BatchNorm2d(64)
+        self.MFCC_transform = MFCC(
+            sample_rate=options.sample_rate,
+            n_mfcc=40,
+            log_mels=True,
+            melkwargs={"n_fft": 1024, "hop_length": 256, "n_mels": 40, 
+                       "f_max":options.sample_rate / 2}
+        )
+
+        self.conv1 = nn.Conv2d(1, 32, kernel_size=(
+            3, 3), stride=(1, 1), padding=(1, 1))
+        self.bn1 = nn.BatchNorm2d(32)
         self.relu1 = nn.ReLU()
         self.pool1 = nn.MaxPool2d(kernel_size=(2, 2), stride=(2, 2))
 
-        self.conv2 = nn.Conv2d(64, 128, kernel_size=(
-            5, 5), stride=(1, 1), padding=(1, 1))
-        self.bn2 = nn.BatchNorm2d(128)
+        self.conv2 = nn.Conv2d(32, 64, kernel_size=(
+            3, 3), stride=(1, 1), padding=(1, 1))
+        self.bn2 = nn.BatchNorm2d(64)
         self.relu2 = nn.ReLU()
         self.pool2 = nn.MaxPool2d(kernel_size=(2, 2), stride=(2, 2))
 
-        self.conv3 = nn.Conv2d(128, 128, kernel_size=(
-            5, 5), stride=(1, 1), padding=(1, 1))
-        self.bn3 = nn.BatchNorm2d(128)
+        self.conv3 = nn.Conv2d(64, 64, kernel_size=(
+            3, 3), stride=(1, 1), padding=(1, 1))
+        self.bn3 = nn.BatchNorm2d(64)
         self.relu3 = nn.ReLU()
         self.pool3 = nn.MaxPool2d(kernel_size=(2, 2), stride=(2, 2))
 
-        self.lstm = nn.LSTM(input_size=2176, hidden_size=256,
+        self.conv4 = nn.Conv2d(64, 128, kernel_size=(
+            3, 3), stride=(1, 1), padding=(1, 1))
+        self.bn4 = nn.BatchNorm2d(128)
+        self.relu4 = nn.ReLU()
+        self.pool4 = nn.MaxPool2d(kernel_size=(2, 2), stride=(2, 2))
+
+        self.lstm = nn.LSTM(input_size=1216, hidden_size=256,
                             num_layers=2, batch_first=True, bidirectional=True)
+        
+        self.dropout = nn.Dropout(0.5)
 
         self.fc = nn.Linear(512, self.num_languages)
 
@@ -56,7 +72,8 @@ class LanguageClassifier(nn.Module):
         # for the pre-processing steps
         with torch.no_grad():
             x = F.normalize(x, p=2.0, dim=1)  # L2 normalization
-            x = self.mel_spectogram_transform(x)
+            # x = self.mel_spectogram_transform(x)
+            x = self.MFCC_transform(x)
 
         x = x.unsqueeze(1)
 
@@ -75,13 +92,20 @@ class LanguageClassifier(nn.Module):
         x = self.relu3(x)
         x = self.pool3(x)
 
+        # x = self.conv4(x)
+        # x = self.bn4(x)
+        # x = self.relu4(x)
+        # x = self.pool4(x)
+
         # Reshape the tensor to feed into LSTM
-        x = x.permute(0, 2, 1, 3).contiguous()
+        x = x.permute(0, 2, 1, 3).contiguous() 
         x = x.view(x.size(0), x.size(1), -1)
-
+        
         x, _ = self.lstm(x)
+        
         x = x[:, -1, :]
-
+        # x = x.view(x.size(0), -1)
+        x = self.dropout(x)
         x = self.fc(x)
         return x
 
@@ -108,7 +132,7 @@ def load_jit_model(options: Options, name="JIT_model_state_dict.pt"):
     return model
 
 
-def train_model(model: LanguageClassifier, train_loader, loss_function, train_losses, get_intermediate_test_loss, options: Options):
+def train_model(model: LanguageClassifier, train_loader, loss_function, options: Options): #train_losses, get_intermediate_test_loss,
     optimizer = torch.optim.Adam(model.parameters(), lr=options.lr)
 
     model.train()
@@ -183,10 +207,11 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(message)s')
     options = Options(use_all_languages=True)
     train_loader, test_loader = get_dataloaders(options)
-    model = load_jit_model(options, "JIT_model_state_dict.pt")
-    #model = load_model_weights(model, options, "model3_state_dict.pt")
-    # train_model(model, train_loader, options)
+    # model = load_jit_model(options, "JIT_model_state_dict.pt")
+    # model = load_model_weights(model, options, "model_state_dict.pt")
+    model = LanguageClassifier(options)
     test_losses = []
     loss_function = nn.CrossEntropyLoss()
+    train_model(model, train_loader, loss_function, options)
     print(test_model(model, test_loader, loss_function, test_losses, options))
-    # save_model_weights(model, options, f"model_{model.num_languages}languages_state_dict.pt")
+    save_model_weights(model, options, f"model_{model.num_languages}languages_state_dict.pt")
