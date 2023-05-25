@@ -26,6 +26,9 @@ def load_data(options: Options) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.
         y_test = np.array([y_test[i] for i in range(
             len(y_test)) if y_test[i] == 1 or y_test[i] == 2]) - 1
 
+    X_train = np.concatenate((X_train, X_train, X_test, X_test))
+    y_train = np.concatenate((y_train, y_train, y_test, y_test))
+
     return X_train, y_train, X_test, y_test
 
 

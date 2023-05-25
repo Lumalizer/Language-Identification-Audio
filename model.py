@@ -18,7 +18,7 @@ class LanguageClassifier(nn.Module):
         self.options = options
         self.num_languages = 6 if options.use_all_languages else 2
 
-        self.lstm_hidden_size = 128
+        self.lstm_hidden_size = 312
 
         self.mel_spectogram_transform = MelSpectrogram(
             sample_rate=options.sample_rate,
@@ -31,9 +31,9 @@ class LanguageClassifier(nn.Module):
 
         self.MFCC_transform = MFCC(
             sample_rate=options.sample_rate,
-            n_mfcc=80,
+            n_mfcc=40,
             log_mels=True,
-            melkwargs={"n_fft": 2048, "hop_length": 256, "n_mels": 80,
+            melkwargs={"n_fft": 1024, "hop_length": 256, "n_mels": 40,
                        "f_max": options.sample_rate / 2},
             norm='ortho'
         )
@@ -65,7 +65,7 @@ class LanguageClassifier(nn.Module):
         self.lstm = nn.LSTM(input_size=1152, hidden_size=self.lstm_hidden_size,
                             num_layers=2, batch_first=True, bidirectional=True)
 
-        self.dropout = nn.Dropout(0.5)
+        self.dropout = nn.Dropout(0.3)
 
         self.fc = nn.Linear(self.lstm_hidden_size * 2, self.num_languages)
 
@@ -118,8 +118,8 @@ class LanguageClassifier(nn.Module):
 def save_model_weights(model: nn.Module, options: Options, name="model_state_dict.pt"):
     if not os.path.exists(options.model_path):
         os.makedirs(options.model_path)
-    torch.save(model.state_dict(), os.path.join(
-        options.model_path, name))
+    # torch.save(model.state_dict(), os.path.join(
+    #     options.model_path, name))
 
     path = os.path.join(options.model_path, f"JIT_{name}")
     torch.jit.save(torch.jit.script(model), path)
@@ -143,15 +143,16 @@ def load_jit_model(options: Options, name="JIT_model_state_dict.pt"):
     return model
 
 
-# train_losses, get_intermediate_test_loss,
 def train_model(model: LanguageClassifier, train_loader, loss_function, options: Options):
     optimizer = torch.optim.Adam(model.parameters(), lr=options.lr)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, factor=0.00005)
+    scheduler = torch.optim.lr_scheduler.LinearLR(
+        optimizer, start_factor=1.0, end_factor=0.1, total_iters=options.n_epochs // 1.5)
 
-    history = np.zeros(options.n_epochs * len(train_loader))
+    history_epoch = np.zeros(options.n_epochs)
+    history_batch = []
 
     model.train()
+    print("Training:")
     for epoch in range(options.n_epochs):
         for batch_i, (data, labels) in enumerate(train_loader):
             optimizer.zero_grad()
@@ -161,16 +162,20 @@ def train_model(model: LanguageClassifier, train_loader, loss_function, options:
             predictions = model(data)
             loss = loss_function(predictions, labels)
 
-            history[batch_i] = (loss.item())
+            history_epoch[epoch] = loss.item()
+            history_batch.append(loss.item())
 
             loss.backward()
             optimizer.step()
+
+            learning_rate = optimizer.param_groups[0]['lr']
+
             print(
-                f"Training: Epoch {epoch} / {options.n_epochs} Batch {batch_i} / {len(train_loader)} Loss {loss.item()}", end="\r")
+                f"Epoch {epoch+1} / {options.n_epochs} Batch {batch_i+1} / {len(train_loader)} LR {learning_rate:0.7f} Loss {loss.item():0.7f}", end="\r")
+        scheduler.step()
+        print("")
 
-    print("\n")
-
-    return history
+    return history_epoch, history_batch
 
 
 def test_model(model: LanguageClassifier, test_loader, loss_function, test_losses, options: Options):
@@ -204,16 +209,30 @@ def build_model(options: Options, train_loader, test_loader, save_model=True, ch
     model = LanguageClassifier(
         options) if checkpoint_dir is None else load_jit_model(options, checkpoint_dir)
 
-    history = train_model(model, train_loader, loss_function, options)
+    history_epoch, history_batch = train_model(
+        model, train_loader, loss_function, options)
 
     if save_model:
         save_model_weights(model, options, f"model_state_dict.pt")
 
-    plt.plot(history, label='training loss')
-    plt.legend()
-    plt.show()
-
     print(test_model(model, test_loader, loss_function, test_losses, options))
+
+    plt.figure(figsize=(10, 5))
+    plt.subplot(1, 2, 1)
+    plt.plot(history_epoch, label="train")
+    plt.title("Epoch loss history")
+    plt.xlabel("Epoch")
+    plt.ylabel("Loss")
+    plt.legend()
+
+    plt.subplot(1, 2, 2)
+    plt.plot(history_batch, label="train")
+    plt.title("Batch loss history")
+    plt.xlabel("Batch")
+    plt.ylabel("Loss")
+    plt.legend()
+
+    plt.show()
 
     return model, train_losses, test_losses
 
@@ -224,5 +243,3 @@ if __name__ == "__main__":
     train_loader, test_loader = get_dataloaders(options)
     model, _, _ = build_model(options, train_loader, test_loader,
                               save_model=True)
-    # save_model_weights(
-    #     model, options, f"model_{model.num_languages}languages_state_dict.pt")
