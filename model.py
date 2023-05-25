@@ -29,7 +29,7 @@ class LanguageClassifier(nn.Module):
             sample_rate=options.sample_rate,
             n_mfcc=40,
             log_mels=True,
-            melkwargs={"n_fft": 1024, "hop_length": 256, "n_mels": 40, 
+            melkwargs={"n_fft": 512, "hop_length": 256, "n_mels": 40, 
                        "f_max":options.sample_rate / 2}
         )
 
@@ -57,7 +57,7 @@ class LanguageClassifier(nn.Module):
         self.relu4 = nn.ReLU()
         self.pool4 = nn.MaxPool2d(kernel_size=(2, 2), stride=(2, 2))
 
-        self.lstm = nn.LSTM(input_size=1216, hidden_size=256,
+        self.lstm = nn.LSTM(input_size=1152, hidden_size=256,
                             num_layers=2, batch_first=True, bidirectional=True)
         
         self.dropout = nn.Dropout(0.5)
@@ -92,10 +92,10 @@ class LanguageClassifier(nn.Module):
         x = self.relu3(x)
         x = self.pool3(x)
 
-        # x = self.conv4(x)
-        # x = self.bn4(x)
-        # x = self.relu4(x)
-        # x = self.pool4(x)
+        x = self.conv4(x)
+        x = self.bn4(x)
+        x = self.relu4(x)
+        x = self.pool4(x)
 
         # Reshape the tensor to feed into LSTM
         x = x.permute(0, 2, 1, 3).contiguous() 
@@ -134,6 +134,7 @@ def load_jit_model(options: Options, name="JIT_model_state_dict.pt"):
 
 def train_model(model: LanguageClassifier, train_loader, loss_function, options: Options): #train_losses, get_intermediate_test_loss,
     optimizer = torch.optim.Adam(model.parameters(), lr=options.lr)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.00005)
 
     model.train()
     for epoch in range(options.n_epochs):
