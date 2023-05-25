@@ -1,9 +1,9 @@
 # Replace the string below:
-MODEL_PATH = "JIT_model_state_dict.pt"
-
-import torch
-import numpy as np
 from torch.utils.data import DataLoader, TensorDataset
+import numpy as np
+import torch
+MODEL_PATH = "model/JIT_model_state_dict.pt"
+
 
 # disable gradient calculation
 torch.set_grad_enabled(False)
@@ -11,7 +11,8 @@ torch.set_grad_enabled(False)
 N_CLASSES = 6
 N = 1200
 
-X_full, y_full = np.load("inputs_test_fp16.npy"), np.load("targets_test_int8.npy")
+X_full, y_full = np.load("dataset/inputs_test_fp16.npy"), np.load(
+    "dataset/targets_test_int8.npy")
 
 X_full = X_full.astype(np.float32)
 X_full = torch.from_numpy(X_full)

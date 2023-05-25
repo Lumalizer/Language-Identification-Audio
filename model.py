@@ -6,6 +6,8 @@ from load_data import get_dataloaders
 import logging
 import os
 import torch.nn.functional as F
+from matplotlib import pyplot as plt
+import numpy as np
 
 
 class LanguageClassifier(nn.Module):
@@ -16,53 +18,58 @@ class LanguageClassifier(nn.Module):
         self.options = options
         self.num_languages = 6 if options.use_all_languages else 2
 
-        self.mel_spectogram_transform = MelSpectrogram(
-            sample_rate=options.sample_rate,
-            n_fft=1024,  # Higher n_fft, higher frequency resolution you get.
-            hop_length=256,  # Smaller hop_length, higher time resolution.
-            n_mels=40,
-            f_max=options.sample_rate / 2,  # the Nyquist frequency -> 0.5 of the sampling rate
-            norm='slaney'
-        )
+        self.lstm_hidden_size = 128
 
         self.MFCC_transform = MFCC(
             sample_rate=options.sample_rate,
-            n_mfcc=40,
+            n_mfcc=80,
             log_mels=True,
-            melkwargs={"n_fft": 1024, "hop_length": 256, "n_mels": 40, 
-                       "f_max":options.sample_rate / 2}
+            melkwargs={"n_fft": 2048, "hop_length": 256, "n_mels": 80,
+                       "f_max": options.sample_rate / 2},
+            norm='ortho'
         )
 
         self.conv1 = nn.Conv2d(1, 32, kernel_size=(
-            3, 3), stride=(1, 1), padding=(1, 1))
+            1, 1), stride=(1, 1), padding=(1, 1))
         self.bn1 = nn.BatchNorm2d(32)
         self.relu1 = nn.ReLU()
         self.pool1 = nn.MaxPool2d(kernel_size=(2, 2), stride=(2, 2))
+        self.dropout1 = nn.Dropout(0.1)
 
-        self.conv2 = nn.Conv2d(32, 64, kernel_size=(
-            3, 3), stride=(1, 1), padding=(1, 1))
-        self.bn2 = nn.BatchNorm2d(64)
+        self.conv2 = nn.Conv2d(32, 32, kernel_size=(
+            1, 1), stride=(1, 1), padding=(1, 1))
+        self.bn2 = nn.BatchNorm2d(32)
         self.relu2 = nn.ReLU()
         self.pool2 = nn.MaxPool2d(kernel_size=(2, 2), stride=(2, 2))
+        self.dropout2 = nn.Dropout(0.1)
 
-        self.conv3 = nn.Conv2d(64, 64, kernel_size=(
-            3, 3), stride=(1, 1), padding=(1, 1))
-        self.bn3 = nn.BatchNorm2d(64)
+        self.conv3 = nn.Conv2d(32, 32, kernel_size=(
+            1, 1), stride=(1, 1), padding=(1, 1))
+        self.bn3 = nn.BatchNorm2d(32)
         self.relu3 = nn.ReLU()
         self.pool3 = nn.MaxPool2d(kernel_size=(2, 2), stride=(2, 2))
+        self.dropout3 = nn.Dropout(0.1)
 
-        self.conv4 = nn.Conv2d(64, 128, kernel_size=(
-            3, 3), stride=(1, 1), padding=(1, 1))
-        self.bn4 = nn.BatchNorm2d(128)
+        self.conv4 = nn.Conv2d(32, 32, kernel_size=(
+            1, 1), stride=(1, 1), padding=(1, 1))
+        self.bn4 = nn.BatchNorm2d(32)
         self.relu4 = nn.ReLU()
         self.pool4 = nn.MaxPool2d(kernel_size=(2, 2), stride=(2, 2))
+        self.dropout4 = nn.Dropout(0.1)
 
-        self.lstm = nn.LSTM(input_size=1216, hidden_size=256,
+        self.conv5 = nn.Conv2d(32, 64, kernel_size=(
+            1, 1), stride=(1, 1), padding=(1, 1))
+        self.bn5 = nn.BatchNorm2d(64)
+        self.relu5 = nn.ReLU()
+        self.pool5 = nn.MaxPool2d(kernel_size=(2, 2), stride=(2, 2))
+        self.dropout5 = nn.Dropout(0.1)
+
+        self.lstm = nn.LSTM(input_size=384, hidden_size=self.lstm_hidden_size,
                             num_layers=2, batch_first=True, bidirectional=True)
-        
+
         self.dropout = nn.Dropout(0.5)
 
-        self.fc = nn.Linear(512, self.num_languages)
+        self.fc = nn.Linear(self.lstm_hidden_size * 2, self.num_languages)
 
         self.to(options.device)
         logging.info(f"Model initialized on {options.device}")
@@ -81,28 +88,38 @@ class LanguageClassifier(nn.Module):
         x = self.bn1(x)
         x = self.relu1(x)
         x = self.pool1(x)
+        x = self.dropout1(x)
 
         x = self.conv2(x)
         x = self.bn2(x)
         x = self.relu2(x)
         x = self.pool2(x)
+        x = self.dropout2(x)
 
         x = self.conv3(x)
         x = self.bn3(x)
         x = self.relu3(x)
         x = self.pool3(x)
+        x = self.dropout3(x)
 
-        # x = self.conv4(x)
-        # x = self.bn4(x)
-        # x = self.relu4(x)
-        # x = self.pool4(x)
+        x = self.conv4(x)
+        x = self.bn4(x)
+        x = self.relu4(x)
+        x = self.pool4(x)
+        x = self.dropout4(x)
+
+        x = self.conv5(x)
+        x = self.bn5(x)
+        x = self.relu5(x)
+        x = self.pool5(x)
+        x = self.dropout5(x)
 
         # Reshape the tensor to feed into LSTM
-        x = x.permute(0, 2, 1, 3).contiguous() 
+        x = x.permute(0, 2, 1, 3).contiguous()
         x = x.view(x.size(0), x.size(1), -1)
-        
+
         x, _ = self.lstm(x)
-        
+
         x = x[:, -1, :]
         # x = x.view(x.size(0), -1)
         x = self.dropout(x)
@@ -116,8 +133,10 @@ def save_model_weights(model: nn.Module, options: Options, name="model_state_dic
     torch.save(model.state_dict(), os.path.join(
         options.model_path, name))
 
-    torch.jit.save(torch.jit.script(model), os.path.join(
-        options.model_path, f"JIT_{name}"))
+    path = os.path.join(options.model_path, f"JIT_{name}")
+    torch.jit.save(torch.jit.script(model), path)
+
+    logging.info(f"Model saved at {path}")
 
 
 def load_model_weights(model: nn.Module, options: Options, name="model_state_dict.pt"):
@@ -127,13 +146,20 @@ def load_model_weights(model: nn.Module, options: Options, name="model_state_dic
 
 
 def load_jit_model(options: Options, name="JIT_model_state_dict.pt"):
+    logging.info(
+        f"Loading JIT model from {os.path.join(options.model_path, name)}")
     model = torch.jit.load(os.path.join(
         options.model_path, name))
+    model = model.to(options.device)
+    logging.info(f"Model loaded on {options.device}")
     return model
 
 
-def train_model(model: LanguageClassifier, train_loader, loss_function, options: Options): #train_losses, get_intermediate_test_loss,
-    optimizer = torch.optim.Adam(model.parameters(), lr=options.lr)
+def train_model(model: LanguageClassifier, train_loader, loss_function, options: Options):
+    optimizer = torch.optim.Adam(
+        model.parameters(), lr=options.lr)
+
+    history = np.zeros(options.n_epochs * len(train_loader))
 
     model.train()
     for epoch in range(options.n_epochs):
@@ -145,17 +171,16 @@ def train_model(model: LanguageClassifier, train_loader, loss_function, options:
             predictions = model(data)
             loss = loss_function(predictions, labels)
 
-            # if not batch_i % 10:
-            #     train_losses.append(loss.item())
-            #     get_intermediate_test_loss(model)
-            #     model.train()
+            history[batch_i] = (loss.item())
 
             loss.backward()
             optimizer.step()
             print(
                 f"Training: Epoch {epoch} / {options.n_epochs} Batch {batch_i} / {len(train_loader)} Loss {loss.item()}", end="\r")
+
     print("\n")
-    return model
+
+    return history
 
 
 def test_model(model: LanguageClassifier, test_loader, loss_function, test_losses, options: Options):
@@ -168,37 +193,37 @@ def test_model(model: LanguageClassifier, test_loader, loss_function, test_losse
         labels = labels.to(options.device)
         predictions = model(data)
 
-        if options.record_intermediate_losses:
-            loss = loss_function(predictions, labels)
-            temp_losses.append(float(loss) / options.batch_size)
-
         accuracy = (torch.max(predictions, dim=-1, keepdim=True)
                     [1].flatten() == labels).sum() / len(labels)
         test_acc += accuracy.item()
-
-    if options.record_intermediate_losses:
-        test_losses.append(sum(temp_losses) / len(temp_losses))
-        temp_losses = []
 
     test_acc /= len(test_loader)
     return f"Test accuracy {test_acc}"
 
 
-def build_model(options: Options, train_loader, test_loader):
+def build_model(options: Options, train_loader, test_loader, save_model=True, checkpoint_dir=None):
     train_losses = []
     test_losses = []
 
-    loss_function = nn.CrossEntropyLoss()
+    weights = torch.tensor([1., 1., 1., 1., 1., 1.])
+    weights = weights.to(options.device)
 
-    # BCE would be best, but expects
-    # loss_function = nn.CrossEntropyLoss() if options.use_all_languages else nn.BCELoss()
-    def get_test_loss_during_training(model): return test_model(model, test_loader, loss_function, test_losses,
-                                                                options)
+    loss_function = nn.CrossEntropyLoss(
+        weight=weights)
 
-    model = LanguageClassifier(options)
-    train_model(model, train_loader, loss_function, train_losses,
-                get_test_loss_during_training, options)
-    test_model(model, test_loader, loss_function, test_losses, options)
+    model = LanguageClassifier(
+        options) if checkpoint_dir is None else load_jit_model(options, checkpoint_dir)
+
+    history = train_model(model, train_loader, loss_function, options)
+
+    if save_model:
+        save_model_weights(model, options, f"model_state_dict.pt")
+
+    plt.plot(history, label='training loss')
+    plt.legend()
+    plt.show()
+
+    print(test_model(model, test_loader, loss_function, test_losses, options))
 
     return model, train_losses, test_losses
 
@@ -207,11 +232,7 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(message)s')
     options = Options(use_all_languages=True)
     train_loader, test_loader = get_dataloaders(options)
-    # model = load_jit_model(options, "JIT_model_state_dict.pt")
-    # model = load_model_weights(model, options, "model_state_dict.pt")
-    model = LanguageClassifier(options)
-    test_losses = []
-    loss_function = nn.CrossEntropyLoss()
-    train_model(model, train_loader, loss_function, options)
-    print(test_model(model, test_loader, loss_function, test_losses, options))
-    save_model_weights(model, options, f"model_{model.num_languages}languages_state_dict.pt")
+    model, _, _ = build_model(options, train_loader, test_loader,
+                              save_model=True)
+    # save_model_weights(
+    #     model, options, f"model_{model.num_languages}languages_state_dict.pt")
