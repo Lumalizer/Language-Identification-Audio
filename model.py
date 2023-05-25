@@ -20,6 +20,15 @@ class LanguageClassifier(nn.Module):
 
         self.lstm_hidden_size = 128
 
+        self.mel_spectogram_transform = MelSpectrogram(
+            sample_rate=options.sample_rate,
+            n_fft=1024,  # Higher n_fft, higher frequency resolution you get.
+            hop_length=256,  # Smaller hop_length, higher time resolution.
+            n_mels=40,
+            f_max=options.sample_rate / 2,  # the Nyquist frequency -> 0.5 of the sampling rate
+            norm='slaney'
+        )
+
         self.MFCC_transform = MFCC(
             sample_rate=options.sample_rate,
             n_mfcc=80,
@@ -30,41 +39,30 @@ class LanguageClassifier(nn.Module):
         )
 
         self.conv1 = nn.Conv2d(1, 32, kernel_size=(
-            1, 1), stride=(1, 1), padding=(1, 1))
+            3, 3), stride=(1, 1), padding=(1, 1))
         self.bn1 = nn.BatchNorm2d(32)
         self.relu1 = nn.ReLU()
         self.pool1 = nn.MaxPool2d(kernel_size=(2, 2), stride=(2, 2))
-        self.dropout1 = nn.Dropout(0.1)
 
-        self.conv2 = nn.Conv2d(32, 32, kernel_size=(
-            1, 1), stride=(1, 1), padding=(1, 1))
-        self.bn2 = nn.BatchNorm2d(32)
+        self.conv2 = nn.Conv2d(32, 64, kernel_size=(
+            3, 3), stride=(1, 1), padding=(1, 1))
+        self.bn2 = nn.BatchNorm2d(64)
         self.relu2 = nn.ReLU()
         self.pool2 = nn.MaxPool2d(kernel_size=(2, 2), stride=(2, 2))
-        self.dropout2 = nn.Dropout(0.1)
 
-        self.conv3 = nn.Conv2d(32, 32, kernel_size=(
-            1, 1), stride=(1, 1), padding=(1, 1))
-        self.bn3 = nn.BatchNorm2d(32)
+        self.conv3 = nn.Conv2d(64, 64, kernel_size=(
+            3, 3), stride=(1, 1), padding=(1, 1))
+        self.bn3 = nn.BatchNorm2d(64)
         self.relu3 = nn.ReLU()
         self.pool3 = nn.MaxPool2d(kernel_size=(2, 2), stride=(2, 2))
-        self.dropout3 = nn.Dropout(0.1)
 
-        self.conv4 = nn.Conv2d(32, 32, kernel_size=(
-            1, 1), stride=(1, 1), padding=(1, 1))
-        self.bn4 = nn.BatchNorm2d(32)
+        self.conv4 = nn.Conv2d(64, 128, kernel_size=(
+            3, 3), stride=(1, 1), padding=(1, 1))
+        self.bn4 = nn.BatchNorm2d(128)
         self.relu4 = nn.ReLU()
         self.pool4 = nn.MaxPool2d(kernel_size=(2, 2), stride=(2, 2))
-        self.dropout4 = nn.Dropout(0.1)
 
-        self.conv5 = nn.Conv2d(32, 64, kernel_size=(
-            1, 1), stride=(1, 1), padding=(1, 1))
-        self.bn5 = nn.BatchNorm2d(64)
-        self.relu5 = nn.ReLU()
-        self.pool5 = nn.MaxPool2d(kernel_size=(2, 2), stride=(2, 2))
-        self.dropout5 = nn.Dropout(0.1)
-
-        self.lstm = nn.LSTM(input_size=384, hidden_size=self.lstm_hidden_size,
+        self.lstm = nn.LSTM(input_size=1152, hidden_size=self.lstm_hidden_size,
                             num_layers=2, batch_first=True, bidirectional=True)
 
         self.dropout = nn.Dropout(0.5)
@@ -88,31 +86,21 @@ class LanguageClassifier(nn.Module):
         x = self.bn1(x)
         x = self.relu1(x)
         x = self.pool1(x)
-        x = self.dropout1(x)
 
         x = self.conv2(x)
         x = self.bn2(x)
         x = self.relu2(x)
         x = self.pool2(x)
-        x = self.dropout2(x)
 
         x = self.conv3(x)
         x = self.bn3(x)
         x = self.relu3(x)
         x = self.pool3(x)
-        x = self.dropout3(x)
 
         x = self.conv4(x)
         x = self.bn4(x)
         x = self.relu4(x)
         x = self.pool4(x)
-        x = self.dropout4(x)
-
-        x = self.conv5(x)
-        x = self.bn5(x)
-        x = self.relu5(x)
-        x = self.pool5(x)
-        x = self.dropout5(x)
 
         # Reshape the tensor to feed into LSTM
         x = x.permute(0, 2, 1, 3).contiguous()
@@ -155,9 +143,11 @@ def load_jit_model(options: Options, name="JIT_model_state_dict.pt"):
     return model
 
 
+# train_losses, get_intermediate_test_loss,
 def train_model(model: LanguageClassifier, train_loader, loss_function, options: Options):
-    optimizer = torch.optim.Adam(
-        model.parameters(), lr=options.lr)
+    optimizer = torch.optim.Adam(model.parameters(), lr=options.lr)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, factor=0.00005)
 
     history = np.zeros(options.n_epochs * len(train_loader))
 
