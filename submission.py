@@ -1,17 +1,13 @@
-import torch
-import torch.nn as nn
-from options import Options
-from torchaudio.transforms import MFCC
-import logging
 import os
-import torch.nn.functional as F
-from matplotlib import pyplot as plt
+import logging
 import numpy as np
 from dataclasses import dataclass
 import torch
-import numpy as np
-from options import Options
+import torch.nn as nn
+import torch.nn.functional as F
+from torchaudio.transforms import MFCC
 from torch.utils.data import DataLoader, TensorDataset
+from matplotlib import pyplot as plt
 
 
 @dataclass
